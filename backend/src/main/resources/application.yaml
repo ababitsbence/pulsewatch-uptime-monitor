@@ -1,0 +1,20 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: pulsewatch-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/pulsewatch}
+    username: ${DB_USER:pulsewatch}
+    password: ${DB_PASSWORD:pulsewatch}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
