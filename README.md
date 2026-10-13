@@ -21,7 +21,7 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 
 ## Built With
 
-- **Backend:** Java 21, Spring Boot 3, Spring Security (JWT), Spring Data JPA, Flyway
+- **Backend:** Java 25, Spring Boot 4, Spring Security (JWT), Spring Data JPA, Flyway
 - **Database:** PostgreSQL
 - **Frontend:** React (Vite) *(planned)*
 - **Observability:** Micrometer, Prometheus, Grafana *(planned)*
@@ -30,20 +30,56 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 
 ## Prerequisites
 
-*(to be filled in: Docker, JDK 21, Maven, etc.)*
+- [Docker](https://www.docker.com/), running
+- JDK 25, only needed to run the tests or the app outside Docker (Maven is not needed, the wrapper is included)
 
 ## How to Run
 
-*(to be filled in as the project grows: clone, environment file, run script, URL and port)*
+The API needs PostgreSQL. A single Compose stack is planned; for now, start the two containers by hand.
+
+### 1. Clone the repository
 
 ```
 git clone https://github.com/ababitsbence/pulsewatch-uptime-monitor.git
 cd pulsewatch-uptime-monitor
 ```
 
+### 2. Build the image and start the containers
+
+```
+docker build -t pulsewatch-backend backend
+docker network create pulsewatch-net
+docker run -d --name pw-db --network pulsewatch-net -e POSTGRES_USER=pulsewatch -e POSTGRES_PASSWORD=pulsewatch -e POSTGRES_DB=pulsewatch postgres:17-alpine
+docker run --rm --network pulsewatch-net -p 8081:8081 -e DB_URL=jdbc:postgresql://pw-db:5432/pulsewatch pulsewatch-backend
+```
+
+### 3. Check that it is running
+
+In a second terminal:
+
+```
+curl.exe http://localhost:8081/actuator/health
+```
+
+On macOS/Linux, use `curl` instead of `curl.exe`.
+
+Expected response: `{"groups":["liveness","readiness"],"status":"UP"}`
+
+### 4. Clean up
+
+```
+docker rm -f pw-db
+docker network rm pulsewatch-net
+```
+
 ## Running Tests
 
-*(to be filled in: test command, and a note that Docker must be running for Testcontainers)*
+Docker must be running, because the tests start a PostgreSQL container with Testcontainers.
+
+```
+cd backend
+./mvnw test        # Windows PowerShell: .\mvnw.cmd test
+```
 
 ## Architecture
 
@@ -62,7 +98,7 @@ pulsewatch-uptime-monitor/
 
 ## Roadmap
 
-- [ ] Project skeleton and Docker image
+- [x] Project skeleton and Docker image
 - [ ] JWT authentication
 - [ ] Monitor management API
 - [ ] Health check engine and scheduler
