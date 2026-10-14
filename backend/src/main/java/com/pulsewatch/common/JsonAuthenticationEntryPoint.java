@@ -19,6 +19,7 @@ public class JsonAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setHeader("WWW-Authenticate", "Bearer");
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.setCharacterEncoding("UTF-8");
         response.getWriter().write(
                 "{\"status\":401,\"message\":\"Authentication required\",\"details\":{}}");
     }
