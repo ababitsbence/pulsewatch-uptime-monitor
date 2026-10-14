@@ -10,8 +10,8 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 
 ### Features
 
-- [x] JWT authentication (per-user data isolation arrives with the monitor API)
-- [ ] Monitor management (HTTP and TCP checks, configurable interval and timeout)
+- [x] JWT authentication
+- [x] Monitor management with per-user isolation (HTTP and TCP, configurable interval and timeout)
 - [ ] Scheduled health checks with stored result history
 - [ ] SSRF protection for user-supplied URLs
 - [ ] React dashboard
@@ -102,6 +102,11 @@ cd backend
 | POST | `/api/auth/register` | none | Create an account (`email`, `password` of 8-72 characters) |
 | POST | `/api/auth/login` | none | Returns a JWT bearer token |
 | GET | `/api/users/me` | Bearer token | Returns the current user |
+| GET | `/api/monitors` | Bearer token | List your monitors, newest first |
+| POST | `/api/monitors` | Bearer token | Create a monitor |
+| GET | `/api/monitors/{id}` | Bearer token | Get one of your monitors |
+| PUT | `/api/monitors/{id}` | Bearer token | Replace a monitor (omitting `enabled` sets it to `true`) |
+| DELETE | `/api/monitors/{id}` | Bearer token | Delete a monitor |
 
 Errors use one JSON format: `{"status": 401, "message": "...", "details": {}}`.
 
@@ -122,13 +127,40 @@ $login = Invoke-RestMethod -Method Post -Uri http://localhost:8081/api/auth/logi
 Invoke-RestMethod -Uri http://localhost:8081/api/users/me -Headers @{ Authorization = "Bearer $($login.accessToken)" }
 ```
 
+Create and list monitors (macOS / Linux):
+
+```
+curl -X POST http://localhost:8081/api/monitors -H "Authorization: Bearer <accessToken>" -H "Content-Type: application/json" -d '{"name":"Example","target":"https://example.com","type":"HTTP","intervalSeconds":60,"timeoutSeconds":10}'
+curl http://localhost:8081/api/monitors -H "Authorization: Bearer <accessToken>"
+```
+
+### Monitor fields and validation
+
+| Field | Rule |
+|---|---|
+| `name` | required, up to 100 characters |
+| `type` | `HTTP` or `TCP` |
+| `target` | HTTP: an `http`/`https` URL with a host and no credentials. TCP: `host:port`, port 1 to 65535 |
+| `intervalSeconds` | 30 to 86400 |
+| `timeoutSeconds` | 1 to 60, and smaller than `intervalSeconds` |
+| `expectedStatus` | HTTP only, 100 to 599, defaults to 200 |
+| `enabled` | optional, defaults to `true` |
+
+Example request body:
+
+```
+{"name":"Example","target":"https://example.com","type":"HTTP","intervalSeconds":60,"timeoutSeconds":10}
+```
+
 ## Security Notes
 
 - Passwords are hashed with BCrypt and never returned by the API.
 - Login returns the same error for an unknown email and a wrong password, and does the same hashing work for both, to reduce what response time can reveal.
 - The JWT signing secret comes from the environment, with no default value.
 - Tokens are signed with HS256 and expire after one hour.
-- Not implemented yet: rate limiting on login and refresh tokens (tracked as issues).
+- Monitors are scoped to the logged-in user in every query. Another user's monitor returns 404, the same as one that does not exist, so ids cannot be probed.
+- The database enforces the same limits as the API (allowed types, minimum interval, timeout smaller than interval) as a second line of defence.
+- Not implemented yet: SSRF protection for monitor targets (private and loopback addresses are still accepted, tracked as an issue), rate limiting on login and refresh tokens.
 
 ## Architecture
 
@@ -149,7 +181,7 @@ pulsewatch-uptime-monitor/
 
 - [x] Project skeleton and Docker image
 - [x] JWT authentication
-- [ ] Monitor management API
+- [x] Monitor management API
 - [ ] Health check engine and scheduler
 - [ ] SSRF protection
 - [ ] React dashboard
