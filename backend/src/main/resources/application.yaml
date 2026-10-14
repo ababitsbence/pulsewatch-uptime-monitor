@@ -18,3 +18,8 @@ management:
     web:
       exposure:
         include: health,info
+
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    expiration: 1h

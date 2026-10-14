@@ -5,7 +5,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
-@SpringBootTest
+@SpringBootTest(properties = "app.jwt.secret=integration-test-secret-at-least-32-characters-long")
 @AutoConfigureMockMvc
 public abstract class AbstractIntegrationTest {
 
