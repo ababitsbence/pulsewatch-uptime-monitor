@@ -1,5 +1,6 @@
 package com.pulsewatch.user;
 
+import com.pulsewatch.auth.CurrentUser;
 import com.pulsewatch.auth.UserResponse;
 import com.pulsewatch.common.InvalidCredentialsException;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,11 +21,7 @@ public class UserController {
 
     @GetMapping("/me")
     public UserResponse me(@AuthenticationPrincipal Jwt jwt) {
-        String subject = jwt.getSubject();
-        if (subject == null) {
-            throw new InvalidCredentialsException("Invalid token");
-        }
-        User user = userRepository.findById(Long.valueOf(subject))
+        User user = userRepository.findById(CurrentUser.id(jwt))
                 .orElseThrow(() -> new InvalidCredentialsException("Account no longer exists"));
         return new UserResponse(user.getId(), user.getEmail());
     }
