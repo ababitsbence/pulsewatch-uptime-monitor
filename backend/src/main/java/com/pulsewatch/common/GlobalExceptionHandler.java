@@ -33,4 +33,10 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest()
                 .body(new ErrorResponse(400, "Malformed request body", Map.of()));
     }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ErrorResponse(401, ex.getMessage(), Map.of()));
+    }
 }
