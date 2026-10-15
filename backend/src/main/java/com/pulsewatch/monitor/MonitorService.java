@@ -1,10 +1,13 @@
 package com.pulsewatch.monitor;
 
+import com.pulsewatch.common.RequestValidationException;
 import com.pulsewatch.common.ResourceNotFoundException;
+import com.pulsewatch.ssrf.SsrfGuard;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class MonitorService {
@@ -12,14 +15,16 @@ public class MonitorService {
     private static final int DEFAULT_EXPECTED_STATUS = 200;
 
     private final MonitorRepository monitorRepository;
+    private final SsrfGuard ssrfGuard;
 
-    public MonitorService(MonitorRepository monitorRepository) {
+    public MonitorService(MonitorRepository monitorRepository, SsrfGuard ssrfGuard) {
         this.monitorRepository = monitorRepository;
+        this.ssrfGuard = ssrfGuard;
     }
 
     @Transactional
     public MonitorResponse create(Long userId, MonitorRequest request) {
-        MonitorRequestValidator.validate(request);
+        validate(request);
         Monitor monitor = new Monitor(
                 userId,
                 request.name().trim(),
@@ -46,7 +51,7 @@ public class MonitorService {
 
     @Transactional
     public MonitorResponse update(Long userId, Long id, MonitorRequest request) {
-        MonitorRequestValidator.validate(request);
+        validate(request);
         Monitor monitor = findOwned(userId, id);
         monitor.update(
                 request.name().trim(),
@@ -64,6 +69,16 @@ public class MonitorService {
         monitorRepository.delete(findOwned(userId, id));
     }
 
+    private void validate(MonitorRequest request) {
+        MonitorRequestValidator.validate(request);
+        TargetHost.of(request.type(), request.target())
+                .flatMap(ssrfGuard::violation)
+                .ifPresent(message -> {
+                    throw new RequestValidationException(Map.of("target", message));
+                });
+    }
+
+    // Another user's monitor looks exactly like one that does not exist.
     private Monitor findOwned(Long userId, Long id) {
         return monitorRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Monitor not found"));
