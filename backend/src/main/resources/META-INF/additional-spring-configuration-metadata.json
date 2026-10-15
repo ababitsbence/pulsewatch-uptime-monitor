@@ -1,0 +1,16 @@
+{
+  "properties": [
+    {
+      "name": "app.checks.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether the background scheduler runs health checks.",
+      "defaultValue": true
+    },
+    {
+      "name": "app.checks.tick",
+      "type": "java.time.Duration",
+      "description": "How often the scheduler looks for monitors that are due.",
+      "defaultValue": "PT5S"
+    }
+  ]
+}
