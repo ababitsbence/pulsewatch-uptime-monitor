@@ -12,8 +12,8 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 
 - [x] JWT authentication
 - [x] Monitor management with per-user isolation (HTTP and TCP, configurable interval and timeout)
-- [ ] Scheduled health checks with stored result history
-- [ ] SSRF protection for user-supplied URLs
+- [x] Scheduled health checks with stored result history
+- [x] SSRF protection for user-supplied URLs
 - [ ] React dashboard
 - [ ] Prometheus metrics and a Grafana dashboard
 - [ ] CI pipeline: tests, image build, vulnerability scan
@@ -107,6 +107,7 @@ cd backend
 | GET | `/api/monitors/{id}` | Bearer token | Get one of your monitors |
 | PUT | `/api/monitors/{id}` | Bearer token | Replace a monitor (omitting `enabled` sets it to `true`) |
 | DELETE | `/api/monitors/{id}` | Bearer token | Delete a monitor |
+| GET | `/api/monitors/{id}/results` | Bearer token | Check history, newest first (`?limit=` 1 to 200, default 50) |
 
 Errors use one JSON format: `{"status": 401, "message": "...", "details": {}}`.
 
@@ -152,6 +153,22 @@ Example request body:
 {"name":"Example","target":"https://example.com","type":"HTTP","intervalSeconds":60,"timeoutSeconds":10}
 ```
 
+### Health checks
+
+A background scheduler looks for due monitors every 5 seconds and runs their checks concurrently (virtual threads, at most 50 at a time). A monitor is due when it has no result newer than its interval, so a new monitor is checked within a few seconds.
+
+- **HTTP:** a `GET` request; the check is UP if the status equals `expectedStatus` (default 200). Redirects are not followed, and the response body is never read.
+- **TCP:** UP if a connection to `host:port` succeeds within the timeout.
+- Every outcome is stored with its time, status (`UP`/`DOWN`), response time and, for failures, a short error message.
+
+Results example (macOS / Linux):
+
+```
+curl "http://localhost:8081/api/monitors/<id>/results?limit=10" -H "Authorization: Bearer <accessToken>"
+```
+
+The scheduler keeps its "running now" state in memory, so run a single instance of the API.
+
 ## Security Notes
 
 - Passwords are hashed with BCrypt and never returned by the API.
@@ -160,7 +177,9 @@ Example request body:
 - Tokens are signed with HS256 and expire after one hour.
 - Monitors are scoped to the logged-in user in every query. Another user's monitor returns 404, the same as one that does not exist, so ids cannot be probed.
 - The database enforces the same limits as the API (allowed types, minimum interval, timeout smaller than interval) as a second line of defence.
-- Not implemented yet: SSRF protection for monitor targets (private and loopback addresses are still accepted, tracked as an issue), rate limiting on login and refresh tokens.
+- SSRF protection: monitor targets that resolve to loopback, private, link-local (including the cloud metadata address), carrier-grade NAT, multicast or other reserved addresses are rejected when the monitor is saved, and checked again before every check, because DNS answers can change later. Error messages never include the resolved address. Set `APP_SSRF_ALLOW_PRIVATE_TARGETS=true` to monitor internal services on a private network.
+- Known gap: the HTTP client resolves the name once more when it connects, so a very fast DNS change between the guard's lookup and the connection could still get through (redirects are disabled, which limits the impact). Pinning the checked address is tracked as an issue.
+- Not implemented yet: rate limiting on login and refresh tokens.
 
 ## Architecture
 
@@ -182,8 +201,8 @@ pulsewatch-uptime-monitor/
 - [x] Project skeleton and Docker image
 - [x] JWT authentication
 - [x] Monitor management API
-- [ ] Health check engine and scheduler
-- [ ] SSRF protection
+- [x] Health check engine and scheduler
+- [x] SSRF protection
 - [ ] React dashboard
 - [ ] Compose stack with Prometheus and Grafana
 - [ ] CI pipeline (test, build, scan, push)
