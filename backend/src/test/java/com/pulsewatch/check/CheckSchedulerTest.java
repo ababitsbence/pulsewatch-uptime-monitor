@@ -77,7 +77,8 @@ class CheckSchedulerTest {
 
     @Test
     void doesNotQueueAMonitorWhoseCheckIsStillRunning() {
-        when(monitors.findDueMonitors(any())).thenReturn(List.of(monitor(1L)));
+        Monitor monitor = monitor(1L);
+        when(monitors.findDueMonitors(any())).thenReturn(List.of(monitor));
 
         scheduler.runDueChecks();
         scheduler.runDueChecks();
@@ -87,7 +88,8 @@ class CheckSchedulerTest {
 
     @Test
     void queuesAMonitorAgainOnceItsCheckHasFinished() {
-        when(monitors.findDueMonitors(any())).thenReturn(List.of(monitor(1L)));
+        Monitor monitor = monitor(1L);
+        when(monitors.findDueMonitors(any())).thenReturn(List.of(monitor));
 
         scheduler.runDueChecks();
         runQueuedTasks();
