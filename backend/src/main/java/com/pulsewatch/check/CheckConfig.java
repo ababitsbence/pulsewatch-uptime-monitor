@@ -1,5 +1,6 @@
 package com.pulsewatch.check;
 
+import com.pulsewatch.ssrf.SsrfGuard;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,13 +15,13 @@ import java.util.concurrent.Executors;
 public class CheckConfig {
 
     @Bean
-    HttpHealthCheck httpHealthCheck() {
-        return new HttpHealthCheck(HttpHealthCheck.defaultClient());
+    HealthCheck httpHealthCheck(SsrfGuard guard) {
+        return new GuardedHealthCheck(new HttpHealthCheck(HttpHealthCheck.defaultClient()), guard);
     }
 
     @Bean
-    TcpHealthCheck tcpHealthCheck() {
-        return new TcpHealthCheck();
+    HealthCheck tcpHealthCheck(SsrfGuard guard) {
+        return new GuardedHealthCheck(new TcpHealthCheck(), guard);
     }
 
     @Bean(destroyMethod = "shutdownNow")
