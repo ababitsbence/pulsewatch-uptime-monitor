@@ -27,3 +27,5 @@ app:
     enabled: true
     tick: PT5S
     max-concurrent: 50
+  ssrf:
+    allow-private-targets: false

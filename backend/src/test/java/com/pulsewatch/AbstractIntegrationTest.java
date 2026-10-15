@@ -3,6 +3,7 @@ package com.pulsewatch;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @SpringBootTest(properties = {
@@ -10,6 +11,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
         "app.checks.enabled=false"
 })
 @AutoConfigureMockMvc
+@Import(TestDnsConfig.class)
 public abstract class AbstractIntegrationTest {
 
     @ServiceConnection
