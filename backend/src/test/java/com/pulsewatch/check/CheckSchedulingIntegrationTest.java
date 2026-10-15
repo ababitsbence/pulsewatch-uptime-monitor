@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.context.TestPropertySource;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -24,6 +25,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@TestPropertySource(properties = "app.ssrf.allow-private-targets=true")
 class CheckSchedulingIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
