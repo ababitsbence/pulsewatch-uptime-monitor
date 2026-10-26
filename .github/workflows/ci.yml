@@ -48,3 +48,43 @@ jobs:
 
       - name: Build image
         run: docker build -t pulsewatch-backend backend
+  compose-smoke:
+    name: Compose smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: backend
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Create .env
+        run: |
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
+            echo "JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
+          } > .env
+
+      - name: Start the stack
+        run: docker compose up --build -d --wait --wait-timeout 180
+
+      - name: Health endpoint is up
+        run: curl -fsS http://localhost:8081/actuator/health
+
+      - name: Register, log in and use the API
+        run: |
+          set -euo pipefail
+          JSON='Content-Type: application/json'
+          CREDS='{"email":"ci@example.com","password":"supersecret"}'
+          curl -fsS -X POST http://localhost:8081/api/auth/register -H "$JSON" -d "$CREDS"
+          TOKEN=$(curl -fsS -X POST http://localhost:8081/api/auth/login -H "$JSON" -d "$CREDS" | jq -r .accessToken)
+          curl -fsS http://localhost:8081/api/users/me -H "Authorization: Bearer $TOKEN"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8081/api/monitors -H "Authorization: Bearer $TOKEN" -H "$JSON" -d '{"name":"ci","target":"https://example.com","type":"HTTP","intervalSeconds":30,"timeoutSeconds":10}')" = "201"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8081/api/monitors -H "Authorization: Bearer $TOKEN" -H "$JSON" -d '{"name":"ssrf","target":"http://169.254.169.254/","type":"HTTP","intervalSeconds":30,"timeoutSeconds":10}')" = "400"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/api/monitors)" = "401"
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop the stack
+        if: always()
+        run: docker compose down -v
