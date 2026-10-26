@@ -28,7 +28,7 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 - **Frontend:** React (Vite) *(planned)*
 - **Observability:** Micrometer, Prometheus, Grafana *(planned)*
 - **CI:** GitHub Actions
-- **Infrastructure:** Docker, Docker Compose *(planned)*, Kubernetes *(planned)*
+- **Infrastructure:** Docker, Docker Compose, Kubernetes *(planned)*
 - **Testing:** JUnit 5, Mockito, Testcontainers
 
 ## Prerequisites
@@ -38,8 +38,6 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 
 ## How to Run
 
-The API needs PostgreSQL. A single Compose stack is planned; for now, start the two containers by hand.
-
 ### 1. Clone the repository
 
 ```
@@ -47,32 +45,21 @@ git clone https://github.com/ababitsbence/pulsewatch-uptime-monitor.git
 cd pulsewatch-uptime-monitor
 ```
 
-### 2. Build the image and start the containers
-
-Generate a signing secret for the JWT tokens (the app refuses to start without one):
+### 2. Start the stack
 
 ```
 # Windows PowerShell
-$b = New-Object byte[] 48; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); $env:JWT_SECRET = [Convert]::ToBase64String($b)
+.\run.ps1
 
 # macOS / Linux
-export JWT_SECRET=$(openssl rand -base64 48)
+./run.sh
 ```
 
-Then build and start the containers:
+On first run the script creates a `.env` file with a random database password and JWT signing secret (see `.env.example`), builds the API image and starts PostgreSQL and the API. It waits until the API reports healthy.
 
-```
-docker build -t pulsewatch-backend backend
-docker network create pulsewatch-net
-docker run -d --name pw-db --network pulsewatch-net -e POSTGRES_USER=pulsewatch -e POSTGRES_PASSWORD=pulsewatch -e POSTGRES_DB=pulsewatch postgres:17-alpine
-docker run --rm --network pulsewatch-net -p 8081:8081 -e DB_URL=jdbc:postgresql://pw-db:5432/pulsewatch -e JWT_SECRET pulsewatch-backend
-```
-
-`-e JWT_SECRET` with no value passes the variable from your shell into the container.
+If PowerShell blocks the script, run `powershell -ExecutionPolicy Bypass -File .\run.ps1`.
 
 ### 3. Check that it is running
-
-In a second terminal:
 
 ```
 curl.exe http://localhost:8081/actuator/health
@@ -82,12 +69,14 @@ On macOS/Linux, use `curl` instead of `curl.exe`.
 
 Expected response: `{"groups":["liveness","readiness"],"status":"UP"}`
 
-### 4. Clean up
+### 4. Stop
 
 ```
-docker rm -f pw-db
-docker network rm pulsewatch-net
+docker compose down       # stop, keep the data
+docker compose down -v    # stop and delete the database
 ```
+
+The database is not published to the host, only the API is (port 8081).
 
 ## Running Tests
 
@@ -192,11 +181,16 @@ The scheduler keeps its "running now" state in memory, so run a single instance 
 
 ```
 pulsewatch-uptime-monitor/
-├── .github/        CI workflow (GitHub Actions)
-├── backend/        Spring Boot API
-├── frontend/       React dashboard (planned)
-├── deploy/         Compose and Kubernetes configuration (planned)
-├── docs/           Diagrams and screenshots
+├── .github/
+│   └── workflows/      CI pipeline (GitHub Actions)
+├── backend/            Spring Boot API (Dockerfile, Maven wrapper, tests)
+├── frontend/           React dashboard (planned)
+├── deploy/             Prometheus/Grafana config, Kubernetes manifests (planned)
+├── docs/               Diagrams and screenshots (planned)
+├── .env.example        Template for the .env file
+├── compose.yaml        API + PostgreSQL stack
+├── run.ps1             Start the stack (Windows)
+├── run.sh              Start the stack (macOS / Linux)
 └── README.md
 ```
 
