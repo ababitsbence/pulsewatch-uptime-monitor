@@ -66,6 +66,14 @@ jobs:
       - name: Start the stack
         run: docker compose up --build -d --wait --wait-timeout 180
 
+      - name: Diagnose unhealthy API
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker inspect pulsewatch-uptime-monitor-api-1 \
+            --format '{{json .State.Health}}'
+          docker compose logs --no-color api
+
       - name: Health endpoint is up
         run: curl -fsS http://localhost:8081/actuator/health
 
