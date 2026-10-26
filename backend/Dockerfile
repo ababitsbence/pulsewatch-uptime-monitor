@@ -9,7 +9,12 @@ RUN ./mvnw -q package -DskipTests
 
 # ---- runtime stage ----
 FROM eclipse-temurin:25-jre
-RUN groupadd --system app && useradd --system --gid app app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system app \
+    && useradd --system --gid app app
+
 WORKDIR /app
 COPY --from=build /workspace/target/*.jar app.jar
 USER app
