@@ -1,5 +1,7 @@
 # PulseWatch
 
+[![CI](https://github.com/ababitsbence/pulsewatch-uptime-monitor/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ababitsbence/pulsewatch-uptime-monitor/actions/workflows/ci.yml)
+
 A self-hosted uptime and health monitoring platform. Register endpoints, get scheduled health checks, and see status history in a dashboard, with Prometheus metrics and Kubernetes manifests included.
 
 > **Status:** work in progress. See the roadmap below.
@@ -25,7 +27,8 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 - **Database:** PostgreSQL
 - **Frontend:** React (Vite) *(planned)*
 - **Observability:** Micrometer, Prometheus, Grafana *(planned)*
-- **Infrastructure:** Docker, Docker Compose, GitHub Actions, Kubernetes *(planned)*
+- **CI:** GitHub Actions
+- **Infrastructure:** Docker, Docker Compose *(planned)*, Kubernetes *(planned)*
 - **Testing:** JUnit 5, Mockito, Testcontainers
 
 ## Prerequisites
@@ -189,6 +192,7 @@ The scheduler keeps its "running now" state in memory, so run a single instance 
 
 ```
 pulsewatch-uptime-monitor/
+├── .github/        CI workflow (GitHub Actions)
 ├── backend/        Spring Boot API
 ├── frontend/       React dashboard (planned)
 ├── deploy/         Compose and Kubernetes configuration (planned)
