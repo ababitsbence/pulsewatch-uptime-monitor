@@ -19,22 +19,22 @@ describe('login and register', () => {
         await user.type(screen.getByLabelText('Password'), password)
     }
 
-    it('logs in and shows the signed-in user', async () => {
+    it('logs in and shows the monitors page', async () => {
         fetchMock
             .mockResolvedValueOnce(jsonResponse(200, { accessToken: 'tok', tokenType: 'Bearer', expiresIn: 3600 }))
-            .mockResolvedValueOnce(jsonResponse(200, { id: 1, email: 'me@example.com' }))
+            .mockResolvedValueOnce(jsonResponse(200, []))
         const user = userEvent.setup()
         renderApp('/login')
 
         await fill(user, 'me@example.com', 'supersecret')
         await user.click(screen.getByRole('button', { name: 'Log in' }))
 
-        expect(await screen.findByText(/Signed in as me@example.com/)).toBeInTheDocument()
+        expect(await screen.findByRole('heading', { name: 'Monitors' })).toBeInTheDocument()
         expect(sessionStorage.getItem(TOKEN_KEY)).toBe('tok')
         const [loginUrl, loginOptions] = fetchMock.mock.calls[0]
         expect(loginUrl).toBe('/api/auth/login')
         expect(JSON.parse(loginOptions.body)).toEqual({ email: 'me@example.com', password: 'supersecret' })
-        expect(fetchMock.mock.calls[1][0]).toBe('/api/users/me')
+        expect(fetchMock.mock.calls[1][0]).toBe('/api/monitors')
         expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer tok')
     })
 
@@ -57,14 +57,14 @@ describe('login and register', () => {
         fetchMock
             .mockResolvedValueOnce(jsonResponse(201, { id: 1, email: 'new@example.com' }))
             .mockResolvedValueOnce(jsonResponse(200, { accessToken: 'tok2', tokenType: 'Bearer', expiresIn: 3600 }))
-            .mockResolvedValueOnce(jsonResponse(200, { id: 1, email: 'new@example.com' }))
+            .mockResolvedValueOnce(jsonResponse(200, []))
         const user = userEvent.setup()
         renderApp('/register')
 
         await fill(user, 'new@example.com', 'supersecret')
         await user.click(screen.getByRole('button', { name: 'Register' }))
 
-        expect(await screen.findByText(/Signed in as new@example.com/)).toBeInTheDocument()
+        expect(await screen.findByRole('heading', { name: 'Monitors' })).toBeInTheDocument()
         expect(fetchMock.mock.calls[0][0]).toBe('/api/auth/register')
         expect(fetchMock.mock.calls[1][0]).toBe('/api/auth/login')
     })

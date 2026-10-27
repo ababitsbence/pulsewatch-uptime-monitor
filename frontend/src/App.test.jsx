@@ -23,20 +23,21 @@ describe('routing and sessions', () => {
 
     it('shows the monitors page with the stored token', async () => {
         sessionStorage.setItem(TOKEN_KEY, 'tok')
-        fetchMock.mockResolvedValueOnce(jsonResponse(200, { id: 1, email: 'me@example.com' }))
+        fetchMock.mockResolvedValueOnce(jsonResponse(200, []))
 
         renderApp('/')
 
-        expect(await screen.findByText(/Signed in as me@example.com/)).toBeInTheDocument()
+        expect(await screen.findByRole('heading', { name: 'Monitors' })).toBeInTheDocument()
+        expect(fetchMock.mock.calls[0][0]).toBe('/api/monitors')
         expect(fetchMock.mock.calls[0][1].headers.Authorization).toBe('Bearer tok')
     })
 
     it('logs out and clears the token', async () => {
         sessionStorage.setItem(TOKEN_KEY, 'tok')
-        fetchMock.mockResolvedValueOnce(jsonResponse(200, { id: 1, email: 'me@example.com' }))
+        fetchMock.mockResolvedValueOnce(jsonResponse(200, []))
         const user = userEvent.setup()
         renderApp('/')
-        await screen.findByText(/Signed in as/)
+        await screen.findByRole('heading', { name: 'Monitors' })
 
         await user.click(screen.getByRole('button', { name: 'Log out' }))
 
@@ -58,10 +59,10 @@ describe('routing and sessions', () => {
 
     it('sends a signed-in user away from the login page', async () => {
         sessionStorage.setItem(TOKEN_KEY, 'tok')
-        fetchMock.mockResolvedValueOnce(jsonResponse(200, { id: 1, email: 'me@example.com' }))
+        fetchMock.mockResolvedValueOnce(jsonResponse(200, []))
 
         renderApp('/login')
 
-        expect(await screen.findByText(/Signed in as me@example.com/)).toBeInTheDocument()
+        expect(await screen.findByRole('heading', { name: 'Monitors' })).toBeInTheDocument()
     })
 })
