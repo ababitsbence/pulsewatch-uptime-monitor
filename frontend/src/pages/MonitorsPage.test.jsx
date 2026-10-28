@@ -136,4 +136,15 @@ describe('monitor list', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent('Server error')
         expect(screen.getByText('Example')).toBeInTheDocument()
     })
+
+    it('links each monitor name to its detail page', async () => {
+        signIn()
+        mockApi({
+            'GET /api/monitors': [200, [monitor()]],
+            'GET /api/monitors/1/results?limit=1': [200, []],
+        })
+        renderApp('/')
+
+        expect(await screen.findByRole('link', { name: 'Example' })).toHaveAttribute('href', '/monitors/1')
+    })
 })
