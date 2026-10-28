@@ -5,6 +5,7 @@ import AuthPage from './pages/AuthPage'
 import EditMonitorPage from './pages/EditMonitorPage'
 import MonitorsPage from './pages/MonitorsPage'
 import NewMonitorPage from './pages/NewMonitorPage'
+import MonitorDetailPage from './pages/MonitorDetailPage'
 
 export default function App() {
     return (
@@ -15,6 +16,7 @@ export default function App() {
                 <Route element={<Layout />}>
                     <Route path="/" element={<MonitorsPage />} />
                     <Route path="/monitors/new" element={<NewMonitorPage />} />
+                    <Route path="/monitors/:id" element={<MonitorDetailPage />} />
                     <Route path="/monitors/:id/edit" element={<EditMonitorPage />} />
                 </Route>
             </Route>

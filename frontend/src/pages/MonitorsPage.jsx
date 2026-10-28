@@ -107,7 +107,9 @@ export default function MonitorsPage() {
                             const result = latest[monitor.id]
                             return (
                                 <tr key={monitor.id}>
-                                    <td>{monitor.name}</td>
+                                    <td>
+                                        <Link to={`/monitors/${monitor.id}`}>{monitor.name}</Link>
+                                    </td>
                                     <td className="text-break">{monitor.target}</td>
                                     <td>{monitor.type}</td>
                                     <td>{monitor.intervalSeconds}s</td>
