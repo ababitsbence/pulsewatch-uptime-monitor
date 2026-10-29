@@ -17,12 +17,12 @@ if (-not (Test-Path ".env")) {
 docker compose up --build -d
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-Write-Host "Waiting for the API..."
-for ($i = 0; $i -lt 60; $i++) {
+Write-Host "Waiting for the web app..."
+for ($i = 0; $i -lt 90; $i++) {
     try {
-        $response = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8081/actuator/health" -TimeoutSec 2
+        $response = Invoke-WebRequest -UseBasicParsing -Uri "http://localhost:8080/" -TimeoutSec 2
         if ($response.StatusCode -eq 200) {
-            Write-Host "PulseWatch is up: http://localhost:8081"
+            Write-Host "PulseWatch is up: http://localhost:8080  (API: http://localhost:8081)"
             exit 0
         }
     } catch {
@@ -30,5 +30,5 @@ for ($i = 0; $i -lt 60; $i++) {
     }
 }
 
-Write-Host "The API did not become healthy in time. Check: docker compose logs api"
+Write-Host "The web app did not become healthy in time. Check: docker compose logs"
 exit 1
