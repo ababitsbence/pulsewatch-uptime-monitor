@@ -48,10 +48,11 @@ jobs:
 
       - name: Build image
         run: docker build -t pulsewatch-backend backend
+
   compose-smoke:
     name: Compose smoke test
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     needs: backend
     steps:
       - uses: actions/checkout@v7
@@ -89,6 +90,21 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8081/api/monitors -H "Authorization: Bearer $TOKEN" -H "$JSON" -d '{"name":"ssrf","target":"http://169.254.169.254/","type":"HTTP","intervalSeconds":30,"timeoutSeconds":10}')" = "400"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/api/monitors)" = "401"
 
+      - name: Web app and API proxy
+        run: |
+          set -euo pipefail
+          JSON='Content-Type: application/json'
+          CREDS='{"email":"proxy@example.com","password":"supersecret"}'
+          curl -fsS http://localhost:8080/ -o /tmp/index.html
+          grep -q 'id="root"' /tmp/index.html
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/monitors/1)" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/users/me)" = "401"
+          curl -fsS -X POST http://localhost:8080/api/auth/register -H "$JSON" -d "$CREDS"
+          TOKEN=$(curl -fsS -X POST http://localhost:8080/api/auth/login -H "$JSON" -d "$CREDS" | jq -r .accessToken)
+          curl -fsS http://localhost:8080/api/users/me -H "Authorization: Bearer $TOKEN"
+          curl -sI http://localhost:8080/ -o /tmp/headers.txt
+          grep -qi 'content-security-policy' /tmp/headers.txt
+
       - name: Show logs on failure
         if: failure()
         run: docker compose logs
@@ -96,6 +112,7 @@ jobs:
       - name: Stop the stack
         if: always()
         run: docker compose down -v
+
   frontend:
     name: Frontend tests
     runs-on: ubuntu-latest
