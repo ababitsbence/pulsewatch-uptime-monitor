@@ -16,25 +16,34 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 - [x] Monitor management with per-user isolation (HTTP and TCP, configurable interval and timeout)
 - [x] Scheduled health checks with stored result history
 - [x] SSRF protection for user-supplied URLs
-- [ ] React dashboard
+- [x] React dashboard: monitor list with live status, create, edit, delete and check history
+- [x] One-command Docker Compose stack (API, web app, PostgreSQL)
+- [x] CI pipeline: tests, image build and Compose smoke test
+- [ ] Image publishing (GHCR) and vulnerability scan
 - [ ] Prometheus metrics and a Grafana dashboard
-- [ ] CI pipeline: tests, image build, vulnerability scan
 - [ ] Kubernetes deployment, verified by a smoke test on `kind` in CI
+
+## Screenshots
+
+| Monitors | Monitor detail |
+|---|---|
+| ![Monitor list](docs/screenshots/monitors.png) | ![Monitor detail](docs/screenshots/detail.png) |
 
 ## Built With
 
 - **Backend:** Java 25, Spring Boot 4, Spring Security (JWT), Spring Data JPA, Flyway
 - **Database:** PostgreSQL
-- **Frontend:** React (Vite) *(planned)*
+- **Frontend:** React (Vite), Bootstrap, React Router
 - **Observability:** Micrometer, Prometheus, Grafana *(planned)*
 - **CI:** GitHub Actions
-- **Infrastructure:** Docker, Docker Compose, Kubernetes *(planned)*
-- **Testing:** JUnit 5, Mockito, Testcontainers
+- **Infrastructure:** Docker, Docker Compose, nginx, Kubernetes *(planned)*
+- **Testing:** JUnit 5, Mockito, Testcontainers, Vitest, React Testing Library
 
 ## Prerequisites
 
 - [Docker](https://www.docker.com/), running
-- JDK 25, only needed to run the tests or the app outside Docker (Maven is not needed, the wrapper is included)
+- JDK 25, only needed to run the backend tests or the API outside Docker (Maven is not needed, the wrapper is included)
+- Node 22 or newer, only needed for frontend development
 
 ## How to Run
 
@@ -55,11 +64,15 @@ cd pulsewatch-uptime-monitor
 ./run.sh
 ```
 
-On first run the script creates a `.env` file with a random database password and JWT signing secret (see `.env.example`), builds the API image and starts PostgreSQL and the API. It waits until the API reports healthy.
+On first run the script creates a `.env` file with a random database password and JWT signing secret (see `.env.example`), builds the images and starts PostgreSQL, the API and the web app. It waits until the web app responds.
 
-If PowerShell blocks the script, run `powershell -ExecutionPolicy Bypass -File .\run.ps1`.
+If PowerShell blocks the script, run `powershell -ExecutionPolicy Bypass -File .\run.ps1`. If port 8080 or 8081 is already in use, change the left-hand number of the port mapping in `compose.yaml`.
 
-### 3. Check that it is running
+### 3. Open the app
+
+Open **http://localhost:8080**, register an account and create your first monitor.
+
+To check the API directly:
 
 ```
 curl.exe http://localhost:8081/actuator/health
@@ -76,16 +89,33 @@ docker compose down       # stop, keep the data
 docker compose down -v    # stop and delete the database
 ```
 
-The database is not published to the host, only the API is (port 8081).
+The database is not published to the host. The web app is on port 8080 and the API on port 8081.
 
 ## Running Tests
 
-Docker must be running, because the tests start a PostgreSQL container with Testcontainers.
-
 ```
+# Backend (Docker must be running, the tests start a PostgreSQL container with Testcontainers)
 cd backend
 ./mvnw test        # Windows PowerShell: .\mvnw.cmd test
+
+# Frontend
+cd frontend
+npm install
+npm test
 ```
+
+## Frontend Development
+
+```
+cd frontend
+npm install
+npm run dev      # http://localhost:5173, proxies /api to the API on port 8081
+npm test
+npm run lint
+npm run build
+```
+
+Start the stack with `run.ps1` / `run.sh` first, so the dev server has an API to talk to. In the Compose stack, nginx serves the built app and proxies `/api/` to the API, so the browser only ever talks to one origin and no CORS configuration is needed.
 
 ## API
 
@@ -167,6 +197,7 @@ The scheduler keeps its "running now" state in memory, so run a single instance 
 - Login returns the same error for an unknown email and a wrong password, and does the same hashing work for both, to reduce what response time can reveal.
 - The JWT signing secret comes from the environment, with no default value.
 - Tokens are signed with HS256 and expire after one hour.
+- The web app keeps the token in `sessionStorage`, so it is cleared when the tab closes. Scripts on the page can read it, so the nginx config sends a strict Content-Security-Policy (scripts only from the app's own origin) together with other security headers. An httpOnly cookie would be the stronger alternative.
 - Monitors are scoped to the logged-in user in every query. Another user's monitor returns 404, the same as one that does not exist, so ids cannot be probed.
 - The database enforces the same limits as the API (allowed types, minimum interval, timeout smaller than interval) as a second line of defence.
 - SSRF protection: monitor targets that resolve to loopback, private, link-local (including the cloud metadata address), carrier-grade NAT, multicast or other reserved addresses are rejected when the monitor is saved, and checked again before every check, because DNS answers can change later. Error messages never include the resolved address. Set `APP_SSRF_ALLOW_PRIVATE_TARGETS=true` to monitor internal services on a private network.
@@ -175,20 +206,27 @@ The scheduler keeps its "running now" state in memory, so run a single instance 
 
 ## Architecture
 
-*(diagram to be added in `docs/`)*
+```mermaid
+flowchart LR
+    Browser -->|"HTTP :8080"| Web["web: nginx + React app"]
+    Web -->|"/api/ proxied"| API["api: Spring Boot, port 8081"]
+    API --> DB[("PostgreSQL")]
+    API -->|"scheduled HTTP and TCP checks"| Targets["Monitored endpoints"]
+```
+
+The browser only talks to nginx. nginx serves the built React app and forwards `/api/` to the Spring Boot API, which stores users, monitors and check results in PostgreSQL and runs the scheduled checks against the monitored endpoints.
 
 ## Project Structure
 
 ```
 pulsewatch-uptime-monitor/
-├── .github/
-│   └── workflows/      CI pipeline (GitHub Actions)
+├── .github/            CI workflow (GitHub Actions) and Dependabot config
 ├── backend/            Spring Boot API (Dockerfile, Maven wrapper, tests)
-├── frontend/           React dashboard (planned)
+├── frontend/           React dashboard (Vite, nginx image)
 ├── deploy/             Prometheus/Grafana config, Kubernetes manifests (planned)
-├── docs/               Diagrams and screenshots (planned)
+├── docs/               Screenshots
 ├── .env.example        Template for the .env file
-├── compose.yaml        API + PostgreSQL stack
+├── compose.yaml        API, web app and PostgreSQL stack
 ├── run.ps1             Start the stack (Windows)
 ├── run.sh              Start the stack (macOS / Linux)
 └── README.md
@@ -201,9 +239,11 @@ pulsewatch-uptime-monitor/
 - [x] Monitor management API
 - [x] Health check engine and scheduler
 - [x] SSRF protection
-- [ ] React dashboard
-- [ ] Compose stack with Prometheus and Grafana
-- [ ] CI pipeline (test, build, scan, push)
+- [x] React dashboard
+- [x] Docker Compose stack with run scripts
+- [x] CI: tests, image build and Compose smoke test
+- [ ] CI: image publishing (GHCR) and vulnerability scan
+- [ ] Prometheus and Grafana
 - [ ] Kubernetes deployment with kind smoke test
 
 Further ideas are tracked as GitHub Issues.
