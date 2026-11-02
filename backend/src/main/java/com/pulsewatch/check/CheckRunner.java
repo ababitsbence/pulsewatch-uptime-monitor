@@ -14,10 +14,12 @@ public class CheckRunner {
 
     private final HealthCheckFactory factory;
     private final CheckResultService checkResultService;
+    private final CheckMetrics metrics;
 
-    public CheckRunner(HealthCheckFactory factory, CheckResultService checkResultService) {
+    public CheckRunner(HealthCheckFactory factory, CheckResultService checkResultService, CheckMetrics metrics) {
         this.factory = factory;
         this.checkResultService = checkResultService;
+        this.metrics = metrics;
     }
 
     public void run(Monitor monitor) {
@@ -29,6 +31,9 @@ public class CheckRunner {
             log.warn("Check for monitor {} failed unexpectedly: {}", monitor.getId(), e.toString());
             outcome = CheckOutcome.down(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start), e);
         }
+
+        // measured before storing, so a failing database write does not hide a completed check
+        metrics.record(monitor.getType(), outcome);
 
         try {
             checkResultService.record(monitor.getId(), outcome);

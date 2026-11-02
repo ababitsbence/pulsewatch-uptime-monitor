@@ -2,12 +2,16 @@ package com.pulsewatch.check;
 
 import com.pulsewatch.monitor.Monitor;
 import com.pulsewatch.monitor.MonitorType;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -18,7 +22,8 @@ class CheckRunnerTest {
     private final HealthCheckFactory factory = mock(HealthCheckFactory.class);
     private final HealthCheck healthCheck = mock(HealthCheck.class);
     private final CheckResultService results = mock(CheckResultService.class);
-    private final CheckRunner runner = new CheckRunner(factory, results);
+    private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
+    private final CheckRunner runner = new CheckRunner(factory, results, new CheckMetrics(registry));
 
     private Monitor monitor() {
         Monitor monitor = mock(Monitor.class);
@@ -26,6 +31,10 @@ class CheckRunnerTest {
         when(monitor.getType()).thenReturn(MonitorType.HTTP);
         when(factory.forType(MonitorType.HTTP)).thenReturn(healthCheck);
         return monitor;
+    }
+
+    private double count(String type, String status) {
+        return registry.get("pulsewatch.checks").tag("type", type).tag("status", status).counter().count();
     }
 
     @Test
@@ -47,7 +56,7 @@ class CheckRunnerTest {
         runner.run(monitor);
 
         ArgumentCaptor<CheckOutcome> captor = ArgumentCaptor.forClass(CheckOutcome.class);
-        verify(results).record(org.mockito.ArgumentMatchers.eq(5L), captor.capture());
+        verify(results).record(eq(5L), captor.capture());
         assertThat(captor.getValue().status()).isEqualTo(CheckStatus.DOWN);
         assertThat(captor.getValue().error()).contains("boom");
     }
@@ -59,5 +68,51 @@ class CheckRunnerTest {
         doThrow(new RuntimeException("db down")).when(results).record(any(), any());
 
         assertThatCode(() -> runner.run(monitor)).doesNotThrowAnyException();
+    }
+
+    @Test
+    void countsASuccessfulCheck() {
+        Monitor monitor = monitor();
+        when(healthCheck.check(monitor)).thenReturn(CheckOutcome.up(120));
+
+        runner.run(monitor);
+
+        assertThat(count("http", "up")).isEqualTo(1);
+        assertThat(count("http", "down")).isZero();
+        assertThat(registry.get("pulsewatch.check.duration").tag("type", "http").tag("status", "up")
+                .timer().count()).isEqualTo(1);
+    }
+
+    @Test
+    void countsAFailedCheckAndRecordsItsDuration() {
+        Monitor monitor = monitor();
+        when(healthCheck.check(monitor)).thenReturn(CheckOutcome.down(250, "Connection refused"));
+
+        runner.run(monitor);
+
+        assertThat(count("http", "down")).isEqualTo(1);
+        assertThat(registry.get("pulsewatch.check.duration").tag("type", "http").tag("status", "down")
+                .timer().totalTime(TimeUnit.MILLISECONDS)).isEqualTo(250.0);
+    }
+
+    @Test
+    void countsACheckThatThrewAsDown() {
+        Monitor monitor = monitor();
+        when(healthCheck.check(monitor)).thenThrow(new IllegalStateException("boom"));
+
+        runner.run(monitor);
+
+        assertThat(count("http", "down")).isEqualTo(1);
+    }
+
+    @Test
+    void countsTheCheckEvenWhenStoringTheResultFails() {
+        Monitor monitor = monitor();
+        when(healthCheck.check(monitor)).thenReturn(CheckOutcome.up(10));
+        doThrow(new RuntimeException("db down")).when(results).record(any(), any());
+
+        runner.run(monitor);
+
+        assertThat(count("http", "up")).isEqualTo(1);
     }
 }
