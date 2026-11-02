@@ -21,6 +21,10 @@ management:
   metrics:
     tags:
       application: pulsewatch-api
+  observations:
+    enable:
+      spring:
+        security: false
 
 app:
   jwt:
