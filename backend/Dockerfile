@@ -9,7 +9,9 @@ RUN ./mvnw -q package -DskipTests
 
 # ---- runtime stage ----
 FROM eclipse-temurin:25-jre
+# apt-get upgrade pulls in OS security fixes that are newer than the base image
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system app \
