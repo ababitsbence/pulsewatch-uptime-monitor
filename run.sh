@@ -7,19 +7,22 @@ if [ ! -f .env ]; then
   {
     echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
     echo "JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
+    echo "GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)"
   } > .env
+elif ! grep -q '^GRAFANA_ADMIN_PASSWORD=' .env; then
+  echo "Adding GRAFANA_ADMIN_PASSWORD to the existing .env"
+  if [ -n "$(tail -c1 .env)" ]; then echo >> .env; fi
+  echo "GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)" >> .env
 fi
 
-docker compose up --build -d
+if ! docker compose up --build -d --wait --wait-timeout 180; then
+  echo "The stack did not become healthy in time. Check: docker compose ps, docker compose logs"
+  exit 1
+fi
 
-echo "Waiting for the web app..."
-for _ in $(seq 1 90); do
-  if curl -fsS http://localhost:8080/ > /dev/null 2>&1; then
-    echo "PulseWatch is up: http://localhost:8080  (API: http://localhost:8081)"
-    exit 0
-  fi
-  sleep 2
-done
-
-echo "The web app did not become healthy in time. Check: docker compose logs"
-exit 1
+echo
+echo "PulseWatch is up:"
+echo "  Web app:     http://localhost:8080"
+echo "  API:         http://localhost:8081"
+echo "  Prometheus:  http://localhost:9090"
+echo "  Grafana:     http://localhost:3001  (user: admin, password: GRAFANA_ADMIN_PASSWORD in .env)"
