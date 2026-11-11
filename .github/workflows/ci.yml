@@ -62,6 +62,7 @@ jobs:
           {
             echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)"
             echo "JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
+            echo "GRAFANA_ADMIN_PASSWORD=$(openssl rand -hex 16)"
           } > .env
 
       - name: Start the stack
@@ -104,6 +105,31 @@ jobs:
           curl -fsS http://localhost:8080/api/users/me -H "Authorization: Bearer $TOKEN"
           curl -sI http://localhost:8080/ -o /tmp/headers.txt
           grep -qi 'content-security-policy' /tmp/headers.txt
+
+      - name: Observability stack
+        run: |
+          set -euo pipefail
+          docker compose ps
+          # The API exposes the metrics, including the custom check metrics
+          curl -fsS http://localhost:8081/actuator/prometheus | grep -q 'pulsewatch_checks_total'
+          # nginx forwards only /api/, so the metrics must not be reachable through the web app
+          if curl -s http://localhost:8080/actuator/prometheus | grep -q 'pulsewatch_checks_total'; then
+            echo "Metrics are exposed through nginx"; exit 1
+          fi
+          # Prometheus scrapes the API successfully
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:9090/api/v1/targets \
+              | jq -e '.data.activeTargets[] | select(.labels.job=="pulsewatch-api") | select(.health=="up")' > /dev/null; then
+              echo "Prometheus target is up"; break
+            fi
+            if [ "$i" = "30" ]; then echo "Prometheus target never became up"; exit 1; fi
+            sleep 2
+          done
+          # Grafana is healthy, with the provisioned datasource and dashboard
+          PW=$(grep '^GRAFANA_ADMIN_PASSWORD=' .env | cut -d= -f2-)
+          curl -fsS http://localhost:3001/api/health | jq -e '.database=="ok"'
+          curl -fsS -u "admin:$PW" http://localhost:3001/api/datasources/uid/prometheus | jq -e '.type=="prometheus"'
+          curl -fsS -u "admin:$PW" http://localhost:3001/api/dashboards/uid/pulsewatch-overview | jq -e '.dashboard.title=="PulseWatch overview"'
 
       - name: Show logs on failure
         if: failure()
