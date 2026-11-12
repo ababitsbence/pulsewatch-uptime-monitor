@@ -21,7 +21,8 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 - [x] CI pipeline: tests, image build and Compose smoke test
 - [x] Prometheus metrics and a provisioned Grafana dashboard in the Compose stack
 - [x] Image publishing (GHCR) and vulnerability scan
-- [ ] Kubernetes deployment, verified by a smoke test on `kind` in CI
+- [x] Kubernetes manifests (Kustomize) and a one-command local `kind` setup
+- [ ] Kubernetes smoke test on `kind` in CI
 
 ## Screenshots
 
@@ -36,7 +37,7 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 - **Frontend:** React (Vite), Bootstrap, React Router
 - **Observability:** Micrometer, Prometheus, Grafana
 - **CI/CD:** GitHub Actions, GitHub Container Registry (GHCR), Trivy
-- **Infrastructure:** Docker, Docker Compose, nginx, Kubernetes *(planned)*
+- **Infrastructure:** Docker, Docker Compose, nginx, Kubernetes (Kustomize, kind)
 - **Testing:** JUnit 5, Mockito, Testcontainers, Vitest, React Testing Library
 
 ## Prerequisites
@@ -44,6 +45,7 @@ PulseWatch lets a user register HTTP and TCP endpoints, checks them on a schedul
 - [Docker](https://www.docker.com/), running
 - JDK 25, only needed to run the backend tests or the API outside Docker (Maven is not needed, the wrapper is included)
 - Node 22 or newer, only needed for frontend development
+- [kind](https://kind.sigs.k8s.io/) and [kubectl](https://kubernetes.io/docs/tasks/tools/), only needed for the Kubernetes setup
 
 ## How to Run
 
@@ -250,6 +252,74 @@ Vulnerability scanning:
 - `main`: the publish workflow runs the same scan before pushing, so an image with a fixable HIGH or CRITICAL vulnerability is never published.
 - The Trivy action is pinned to a full commit SHA instead of a version tag, because tags can be moved. Dependabot keeps the pin up to date.
 
+## Kubernetes
+
+The `deploy/k8s/` folder deploys the same stack to Kubernetes with [Kustomize](https://kustomize.io/). It is tested on a local [kind](https://kind.sigs.k8s.io/) cluster (Kubernetes running in Docker containers).
+
+```
+deploy/k8s/
+├── base/               Namespace, PostgreSQL StatefulSet, API and web Deployments and Services
+├── overlays/kind/      Uses locally built images instead of the published ones
+├── kind-up.ps1         Create the cluster and deploy (Windows)
+└── kind-up.sh          Create the cluster and deploy (macOS / Linux)
+```
+
+```mermaid
+flowchart LR
+    Client -->|"port-forward :8080"| WebSvc["Service web"]
+    WebSvc --> WebPod["web pod: nginx"]
+    WebPod -->|"/api/"| ApiSvc["Service api :8081"]
+    ApiSvc --> ApiPod["api pod: Spring Boot"]
+    ApiPod --> DbSvc["Service db (headless)"]
+    DbSvc --> DbPod["db-0: PostgreSQL + volume"]
+```
+
+### Run it locally
+
+Docker must be running, and `kind` and `kubectl` must be installed (Windows: `winget install Kubernetes.kind Kubernetes.kubectl`, then open a new terminal). Stop the Compose stack first (`docker compose down`), because both use port 8080.
+
+```
+# Windows PowerShell
+.\deploy\k8s\kind-up.ps1
+
+# macOS / Linux
+./deploy/k8s/kind-up.sh
+```
+
+The first run takes a few minutes. The script:
+
+1. creates a kind cluster named `pulsewatch` (it reuses an existing one),
+2. builds the API and web images from this checkout and loads them into the cluster,
+3. creates the `pulsewatch-secrets` Secret with a random database password and JWT secret (it keeps an existing one),
+4. applies `deploy/k8s/overlays/kind` and waits until the database, API and web app are ready.
+
+Then open the app through a port-forward:
+
+```
+kubectl --context kind-pulsewatch -n pulsewatch port-forward svc/web 8080:8080
+```
+
+Browse to **http://localhost:8080**. Running the script again rebuilds the images and restarts the API and web pods. To remove everything:
+
+```
+kind delete cluster --name pulsewatch
+```
+
+### Design notes
+
+- **Secrets are not in git.** The Deployments read them from a Secret named `pulsewatch-secrets` (keys `postgres-password` and `jwt-secret`). On another cluster, create it yourself:
+  ```
+  kubectl create namespace pulsewatch
+  kubectl -n pulsewatch create secret generic pulsewatch-secrets --from-literal=postgres-password=<password> --from-literal=jwt-secret=<at least 32 random characters>
+  kubectl apply -k deploy/k8s/base
+  ```
+  The base uses the published images (`ghcr.io/ababitsbence/pulsewatch-api` and `pulsewatch-web`, tag `latest`). An overlay can pin a tag with Kustomize's `images:` field.
+- **The API runs a single replica**, updated with the `Recreate` strategy, because the scheduler keeps its state in memory and a second replica would run every check twice (see issue #20).
+- **The API waits for the database** in an init container. Without it, the API exits at startup when it cannot connect and Kubernetes has to restart it.
+- **Hardening:** every container runs as a non-root user with all capabilities dropped and no privilege escalation. The API and web containers also have a read-only root filesystem, with a temporary directory mounted on `/tmp`. All containers have resource requests and limits.
+- **Probes:** the API uses the Spring Boot liveness and readiness endpoints (`/actuator/health/liveness` and `/actuator/health/readiness`), the database uses `pg_isready`, and the web app checks `/`.
+- **Not included yet:** Prometheus and Grafana in the cluster, an Ingress, and an automated test of these manifests in CI.
+
 ## Architecture
 
 ```mermaid
@@ -271,7 +341,7 @@ pulsewatch-uptime-monitor/
 ├── .github/            CI and image publishing workflows (GitHub Actions), Dependabot config
 ├── backend/            Spring Boot API (Dockerfile, Maven wrapper, tests)
 ├── frontend/           React dashboard (Vite, nginx image)
-├── deploy/             Prometheus and Grafana config (Kubernetes manifests planned)
+├── deploy/             Prometheus and Grafana config, Kubernetes manifests (Kustomize)
 ├── docs/               Screenshots
 ├── .env.example        Template for the .env file
 ├── compose.yaml        API, web app, PostgreSQL, Prometheus and Grafana
@@ -292,7 +362,8 @@ pulsewatch-uptime-monitor/
 - [x] CI: tests, image build and Compose smoke test
 - [x] Prometheus metrics and Grafana dashboard
 - [x] CI: image publishing (GHCR) and vulnerability scan
-- [ ] Kubernetes deployment with kind smoke test
+- [x] Kubernetes manifests (Kustomize) and local kind setup
+- [ ] Kubernetes smoke test on kind in CI
 
 Further ideas are tracked as GitHub Issues.
 
