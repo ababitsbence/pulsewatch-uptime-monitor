@@ -14,11 +14,12 @@ RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd --system app \
-    && useradd --system --gid app app
+    && groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app app
 
 WORKDIR /app
 COPY --from=build /workspace/target/*.jar app.jar
-USER app
+# Numeric user, so that Kubernetes can verify the container does not run as root
+USER 10001:10001
 EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "app.jar"]
