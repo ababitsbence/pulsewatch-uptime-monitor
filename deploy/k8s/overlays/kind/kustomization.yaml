@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Local kind cluster: use the images built on this machine and loaded into the cluster
+# (see deploy/k8s/kind-up.ps1 and kind-up.sh), instead of the published ones.
+resources:
+  - ../../base
+
+images:
+  - name: ghcr.io/ababitsbence/pulsewatch-api
+    newName: pulsewatch-api
+    newTag: kind
+  - name: ghcr.io/ababitsbence/pulsewatch-web
+    newName: pulsewatch-web
+    newTag: kind
