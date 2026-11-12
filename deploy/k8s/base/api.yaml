@@ -42,6 +42,28 @@ spec:
         runAsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
+      initContainers:
+        # The API stops at startup if it cannot reach the database, and the "db" name does not
+        # resolve until the database pod is ready, so wait for it here instead of crashing.
+        # -U is required: this container runs as a user without a passwd entry, and without
+        # an explicit user name pg_isready gives up with "no attempt" instead of connecting.
+        - name: wait-for-db
+          image: postgres:17-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -h db -p 5432 -U pulsewatch -t 2; do echo "waiting for the database"; sleep 2; done
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
       containers:
         - name: api
           image: ghcr.io/ababitsbence/pulsewatch-api
