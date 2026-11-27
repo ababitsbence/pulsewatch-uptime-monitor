@@ -1,3 +1,4 @@
+
 name: CI
 
 on:
@@ -63,8 +64,8 @@ jobs:
       - name: Build image
         run: docker build -t pulsewatch-${{ matrix.image }}:scan ${{ matrix.image }}
 
-      # Pinned to a full commit SHA, not a tag: in March 2026 most trivy-action tags were
-      # force-pushed to malicious code. Dependabot keeps this SHA up to date.
+      # Pinned to a full commit SHA, not a tag.
+      # Dependabot keeps this SHA up to date.
       - name: Scan image with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -109,25 +110,55 @@ jobs:
           set -euo pipefail
           JSON='Content-Type: application/json'
           CREDS='{"email":"ci@example.com","password":"supersecret"}'
-          curl -fsS -X POST http://localhost:8081/api/auth/register -H "$JSON" -d "$CREDS"
-          TOKEN=$(curl -fsS -X POST http://localhost:8081/api/auth/login -H "$JSON" -d "$CREDS" | jq -r .accessToken)
-          curl -fsS http://localhost:8081/api/users/me -H "Authorization: Bearer $TOKEN"
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8081/api/monitors -H "Authorization: Bearer $TOKEN" -H "$JSON" -d '{"name":"ci","target":"https://example.com","type":"HTTP","intervalSeconds":30,"timeoutSeconds":10}')" = "201"
-          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8081/api/monitors -H "Authorization: Bearer $TOKEN" -H "$JSON" -d '{"name":"ssrf","target":"http://169.254.169.254/","type":"HTTP","intervalSeconds":30,"timeoutSeconds":10}')" = "400"
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8081/api/monitors)" = "401"
+
+          curl -fsS -X POST http://localhost:8081/api/auth/register \
+            -H "$JSON" -d "$CREDS"
+
+          TOKEN=$(curl -fsS -X POST http://localhost:8081/api/auth/login \
+            -H "$JSON" -d "$CREDS" | jq -r .accessToken)
+
+          curl -fsS http://localhost:8081/api/users/me \
+            -H "Authorization: Bearer $TOKEN"
+
+          test "$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST http://localhost:8081/api/monitors \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "$JSON" \
+            -d '{"name":"ci","target":"https://example.com","type":"HTTP","intervalSeconds":30,"timeoutSeconds":10}')" = "201"
+
+          test "$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST http://localhost:8081/api/monitors \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "$JSON" \
+            -d '{"name":"ssrf","target":"http://169.254.169.254/","type":"HTTP","intervalSeconds":30,"timeoutSeconds":10}')" = "400"
+
+          test "$(curl -s -o /dev/null -w '%{http_code}' \
+            http://localhost:8081/api/monitors)" = "401"
 
       - name: Web app and API proxy
         run: |
           set -euo pipefail
           JSON='Content-Type: application/json'
           CREDS='{"email":"proxy@example.com","password":"supersecret"}'
+
           curl -fsS http://localhost:8080/ -o /tmp/index.html
           grep -q 'id="root"' /tmp/index.html
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/monitors/1)" = "200"
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8080/api/users/me)" = "401"
-          curl -fsS -X POST http://localhost:8080/api/auth/register -H "$JSON" -d "$CREDS"
-          TOKEN=$(curl -fsS -X POST http://localhost:8080/api/auth/login -H "$JSON" -d "$CREDS" | jq -r .accessToken)
-          curl -fsS http://localhost:8080/api/users/me -H "Authorization: Bearer $TOKEN"
+
+          test "$(curl -s -o /dev/null -w '%{http_code}' \
+            http://localhost:8080/monitors/1)" = "200"
+
+          test "$(curl -s -o /dev/null -w '%{http_code}' \
+            http://localhost:8080/api/users/me)" = "401"
+
+          curl -fsS -X POST http://localhost:8080/api/auth/register \
+            -H "$JSON" -d "$CREDS"
+
+          TOKEN=$(curl -fsS -X POST http://localhost:8080/api/auth/login \
+            -H "$JSON" -d "$CREDS" | jq -r .accessToken)
+
+          curl -fsS http://localhost:8080/api/users/me \
+            -H "Authorization: Bearer $TOKEN"
+
           curl -sI http://localhost:8080/ -o /tmp/headers.txt
           grep -qi 'content-security-policy' /tmp/headers.txt
 
@@ -135,26 +166,51 @@ jobs:
         run: |
           set -euo pipefail
           docker compose ps
-          # The API exposes the metrics, including the custom check metrics
-          curl -fsS http://localhost:8081/actuator/prometheus | grep -q 'pulsewatch_checks_total'
-          # nginx forwards only /api/, so the metrics must not be reachable through the web app
-          if curl -s http://localhost:8080/actuator/prometheus | grep -q 'pulsewatch_checks_total'; then
-            echo "Metrics are exposed through nginx"; exit 1
+
+          # The API exposes the custom check metrics
+          curl -fsS http://localhost:8081/actuator/prometheus \
+            -o /tmp/api-metrics.txt
+
+          grep -q 'pulsewatch_checks_total' /tmp/api-metrics.txt
+
+          # nginx must not expose metrics through the web app
+          curl -sS http://localhost:8080/actuator/prometheus \
+            -o /tmp/web-metrics.txt
+
+          if grep -q 'pulsewatch_checks_total' /tmp/web-metrics.txt; then
+            echo "Metrics are exposed through nginx"
+            exit 1
           fi
+
           # Prometheus scrapes the API successfully
           for i in $(seq 1 30); do
             if curl -fsS http://localhost:9090/api/v1/targets \
               | jq -e '.data.activeTargets[] | select(.labels.job=="pulsewatch-api") | select(.health=="up")' > /dev/null; then
-              echo "Prometheus target is up"; break
+              echo "Prometheus target is up"
+              break
             fi
-            if [ "$i" = "30" ]; then echo "Prometheus target never became up"; exit 1; fi
+
+            if [ "$i" = "30" ]; then
+              echo "Prometheus target never became up"
+              exit 1
+            fi
+
             sleep 2
           done
+
           # Grafana is healthy, with the provisioned datasource and dashboard
           PW=$(grep '^GRAFANA_ADMIN_PASSWORD=' .env | cut -d= -f2-)
-          curl -fsS http://localhost:3001/api/health | jq -e '.database=="ok"'
-          curl -fsS -u "admin:$PW" http://localhost:3001/api/datasources/uid/prometheus | jq -e '.type=="prometheus"'
-          curl -fsS -u "admin:$PW" http://localhost:3001/api/dashboards/uid/pulsewatch-overview | jq -e '.dashboard.title=="PulseWatch overview"'
+
+          curl -fsS http://localhost:3001/api/health \
+            | jq -e '.database=="ok"'
+
+          curl -fsS -u "admin:$PW" \
+            http://localhost:3001/api/datasources/uid/prometheus \
+            | jq -e '.type=="prometheus"'
+
+          curl -fsS -u "admin:$PW" \
+            http://localhost:3001/api/dashboards/uid/pulsewatch-overview \
+            | jq -e '.dashboard.title=="PulseWatch overview"'
 
       - name: Show logs on failure
         if: failure()
